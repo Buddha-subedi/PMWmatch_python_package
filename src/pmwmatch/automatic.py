@@ -112,18 +112,21 @@ def process(dpr_file,pmw_files,output_file,delta_t=7.5,max_distance_km=15,plot=T
     if not np.isfinite(delta_t) or delta_t<0 or not 0<max_distance_km<=20000: raise ValueError('Invalid tolerance')
     with h5py.File(dpr_file,'r') as h: dpr=read_group(h,'FS','SLV/precipRateNearSurface')
     from .trackplots import plot_pair
-    merged={}; sources={}; modes={}
+    merged={}; sources={}; modes={}; owners={}
     pmw_files=list(pmw_files)
     out=Path(output_file); out.parent.mkdir(parents=True,exist_ok=True)
-    for file in pmw_files:
+    for file_index, file in enumerate(pmw_files):
         swaths=read_all(file); pair_matches=[]
         for g,src in swaths.items():
             r=map_group(src,dpr,delta_t,max_distance_km); modes.setdefault(g,set()).add(src['time_mode'])
             pair_matches.append(r)
-            if g not in merged: merged[g]={k:v.copy() for k,v in r.items()}; sources[g]=[]
+            if g not in merged:
+                merged[g]={k:v.copy() for k,v in r.items()}; sources[g]=[]
+                owners[g]=np.where(np.isfinite(r['pmw_tb']),file_index,-1).astype(np.int32)
             else:
                 old=merged[g]; take=np.isfinite(r['pmw_tb'])&(~np.isfinite(old['pmw_tb'])|(r['distance_km']<old['distance_km']))
                 for k in r: old[k][take]=r[k][take]
+                owners[g][take]=file_index
             if plot: sources[g].append(src)
         if plot and any(np.isfinite(r['pmw_tb']).any() for r in pair_matches):
             plot_pair(dpr_file,file,dpr,swaths,pair_matches,out,delta_t,track_distance_km,show)
@@ -133,8 +136,13 @@ def process(dpr_file,pmw_files,output_file,delta_t=7.5,max_distance_km=15,plot=T
         names=['19.35V','19.35H','22.235V','37V','37H','150H','183.31±1H','183.31±3H','183.31±6.6H','91.665V','91.665H']
     payload={k:np.concatenate([merged[g][k] for g in groups],axis=-1) for k in next(iter(merged.values()))}
     payload.update(latitude=dpr['lat'],longitude=dpr['lon'],dpr_time=dpr['time'],dpr_precipitation=dpr['data'],channel_names=np.array(names),coincidence_mask=np.isfinite(payload['pmw_tb']))
-    out=Path(output_file); out.parent.mkdir(parents=True,exist_ok=True); np.savez_compressed(out,**payload)
-    out.with_suffix('.json').write_text(json.dumps(dict(dpr_file=str(dpr_file),pmw_files=list(map(str,pmw_files)),dpr_time_mode=dpr['time_mode'],pmw_time_modes={g:sorted(v) for g,v in modes.items()},delta_t_minutes=delta_t,max_distance_km=max_distance_km),indent=2))
+    used_indices=sorted({int(i) for a in owners.values() for i in np.unique(a) if i>=0})
+    used_orbits=sorted({orbit(pmw_files[i]) for i in used_indices})
+    suffix="_".join(f"{n:06d}" for n in used_orbits) or "no_match"
+    out=Path(output_file)
+    out=out.with_name(f"{out.stem}_{suffix}.npz")
+    out.parent.mkdir(parents=True,exist_ok=True); np.savez_compressed(out,**payload)
+    out.with_suffix('.json').write_text(json.dumps(dict(dpr_file=str(dpr_file),pmw_files=list(map(str,pmw_files)),contributing_pmw_orbits=used_orbits,contributing_pmw_files=[str(pmw_files[i]) for i in used_indices],dpr_time_mode=dpr['time_mode'],pmw_time_modes={g:sorted(v) for g,v in modes.items()},delta_t_minutes=delta_t,max_distance_km=max_distance_km),indent=2))
     return str(out)
 
 def plot_tb(dpr,merged,sources,path,n=3):
