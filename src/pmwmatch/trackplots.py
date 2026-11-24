@@ -6,6 +6,7 @@ import h5py
 from scipy.spatial import cKDTree
 from .matching import _xyz, EARTH_KM
 from .readers import _get
+from .orbits import find_intersections
 
 def track(path,group,swath):
     with h5py.File(path) as h:
@@ -64,7 +65,26 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
     a = track(df, "FS", dpr)
     b = track(pf, g, swaths[g])
 
-    ev = events(a, b, minutes, km)
+    
+    def track_to_swath(tr):
+        return {
+            "lat": np.asarray(tr[0])[:, None],
+            "lon": np.asarray(tr[1])[:, None],
+            "time": np.asarray(tr[2])[:, None]
+        }
+    
+    crossings = find_intersections(
+        pmw=track_to_swath(b),
+        dpr=track_to_swath(a),
+        coincidence_minutes=minutes,
+        search_radius_km=km
+    )
+    
+    print(
+        f"[TRACK] DPR / {sensor}: "
+        f"{len(crossings)} valid geometric intersections"
+    )
+
 
     # ========================================================
     # INITIALIZE FIGURE
