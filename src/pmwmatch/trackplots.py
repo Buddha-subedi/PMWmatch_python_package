@@ -33,44 +33,6 @@ def events(a,b,minutes,km,separation=500):
         if all(np.linalg.norm(x[i]-x[k])>2*np.sin(separation/(2*EARTH_KM)) for k,l in chosen): chosen.append((i,j))
     return chosen
 
-def footprint_events(dpr, matches, minutes, separation=500):
-    """Representative accepted DPR footprints, separated geographically."""
-    lat = np.asarray(dpr['lat']).ravel()
-    lon = np.asarray(dpr['lon']).ravel()
-    td = np.asarray(dpr['time']).ravel()
-    best = np.full(lat.size, np.inf)
-    times = np.full(lat.size, np.nan)
-    for m in matches:
-        tb = m['pmw_tb'].reshape(lat.size, -1)
-        dt = m['delta_t_minutes'].reshape(lat.size, -1)
-        pt = m['pmw_time'].reshape(lat.size, -1)
-        valid = np.isfinite(tb) & np.isfinite(dt) & np.isfinite(pt) & (dt <= minutes)
-        score = np.where(valid, dt, np.inf)
-        c = score.argmin(axis=1)
-        rows = np.arange(lat.size)
-        take = score[rows, c] < best
-        best[take] = score[rows, c][take]
-        times[take] = pt[rows, c][take]
-    ids = np.flatnonzero(np.isfinite(best) & np.isfinite(lat) &
-                         np.isfinite(lon) & np.isfinite(td) & (abs(lat) <= 90))
-    if not len(ids):
-        return []
-    xyz = _xyz(lat[ids], lon[ids])
-    tree = cKDTree(xyz)
-    blocked = np.zeros(len(ids), dtype=bool)
-    radius = 2*np.sin(separation/(2*EARTH_KM))
-    result = []
-    for k in np.argsort(best[ids], kind='stable'):
-        if blocked[k]:
-            continue
-        i = ids[k]
-        result.append(dict(latitude=float(lat[i]), longitude=float((lon[i]+180)%360-180),
-                           dpr_time=float(td[i]), pmw_time=float(times[i]),
-                           delta_minutes=float(abs(td[i]-times[i])/60), kind='footprint'))
-        blocked[tree.query_ball_point(xyz[k], radius)] = True
-    return result
-
-
 def _finish(fig,path,show):
     import matplotlib.pyplot as plt
     fig.savefig(path,dpi=250,bbox_inches='tight')
@@ -106,13 +68,14 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
     def as_swath(tr):
         return {k: np.asarray(v)[:, None] for k, v in zip(('lat', 'lon', 'time'), tr[:3])}
 
-    crossings = find_intersections(as_swath(b), as_swath(a),
-                                   coincidence_minutes=minutes, search_radius_km=km)
-    for c in crossings:
-        c['kind'] = 'crossing'
-    annotations = crossings or footprint_events(dpr, matches, minutes)
-    print(f"[TRACK] DPR / {sensor}: {len(crossings)} valid geometric intersections; "
-          f"{sum(c['kind'] == 'footprint' for c in annotations)} footprint markers")
+    annotations = find_intersections(as_swath(b), as_swath(a),
+                                     coincidence_minutes=np.inf, search_radius_km=km)
+    for c in annotations:
+        c['valid'] = c['delta_minutes'] <= minutes
+        print(f"[CROSSING] lat={c['latitude']:.4f}, lon={c['longitude']:.4f}, "
+              f"delta_t={c['delta_minutes']:.2f} min, valid={c['valid']}")
+    print(f"[TRACK] DPR / {sensor}: {len(annotations)} geometric intersections; "
+          f"{sum(c['valid'] for c in annotations)} within time tolerance")
 
     # ========================================================
     # INITIALIZE FIGURE
@@ -333,7 +296,7 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
         dpr_time = fmt(c['dpr_time'])
         pmw_time = fmt(c['pmw_time'])
         delta_t = c['delta_minutes']
-        prefix = "Footprint match\n" if c['kind'] == 'footprint' else ""
+        prefix = "" if c['valid'] else "Outside time tolerance\n"
         annotation_text = (
             f"{prefix}ΔT: {delta_t:.1f} min\n"
             f"DPR: {dpr_time}\n"
@@ -474,7 +437,7 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
         ax.plot(
             lon,
             lat,
-            "ks" if c["kind"] == "footprint" else "ko",
+            "ko" if c["valid"] else "kx",
             markersize=8,
             transform=ccrs.Geodetic(),
             zorder=9
