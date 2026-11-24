@@ -116,7 +116,7 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
     for number,cross in enumerate(crossings,1):
         lon0,lat0 = cross['longitude'],cross['latitude']
         # Fixed regional extent; longitude relative to crossing.
-        half_lat = 10.0; half_lon = 15.0
+        half_lat = 15.0; half_lon = 20.0
         south,north = max(-90.,lat0-half_lat),min(90.,lat0+half_lat)
         wrap = lambda x: (np.asarray(x)-lon0+180)%360-180
         def region(s):
@@ -152,9 +152,9 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
         print(f'[SELECTED CHANNELS] {sensor}: {choices}')
         geo=ccrs.PlateCarree(); local=ccrs.PlateCarree(central_longitude=lon0)
         with plt.rc_context({'font.family':'serif','font.size':10}):
-            fig=plt.figure(figsize=(10,8.4))
-            gs=fig.add_gridspec(4,3,height_ratios=[2.5,1,1,.10],hspace=.12,wspace=.05,left=.08,right=.92,top=.91,bottom=.09)
-            ax=fig.add_subplot(gs[0,:],projection=local); ax.set_global(); ax.coastlines('110m',linewidth=.45,color='gray')
+            fig=plt.figure(figsize=(12,10))
+            gs=fig.add_gridspec(4,3,height_ratios=[2.5,1.15,1.15,.10],hspace=.20,wspace=.05,left=.08,right=.92,top=.875,bottom=.085)
+            ax=fig.add_subplot(gs[0,:],projection=local); ax.set_global(); ax.set_anchor('N'); ax.stock_img(); ax.coastlines('110m',linewidth=.55,color='black')
             for t,color,label in [(a,'blue','DPR track'),(b,'darkviolet',f'{sensor} track')]:
                 ax.plot(t[1],t[0],transform=ccrs.Geodetic(),color=color,lw=1.3,label=label)
             ax.add_patch(Rectangle((-half_lon,south),2*half_lon,north-south,transform=local,fill=False,ec='black',lw=1.2,label='Coincidence region'))
@@ -188,7 +188,11 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
                     for j in (0,-1): axr.plot(wrap(dpr['lon'][:,j]),dpr['lat'][:,j],transform=local,color='black',lw=.45)
                 axes[0].set_title(f'{f:g} GHz ({g}, ch {i+1})',fontsize=10,fontweight='bold')
                 cb=fig.colorbar(im,cax=fig.add_subplot(gs[3,col]),orientation='horizontal'); cb.set_label(f'TB {f:g} GHz (K)'); cb.locator=MaxNLocator(4); cb.update_ticks()
-            fig.text(.955,.40,'DPR swath',rotation=90,ha='center',va='center',fontweight='bold'); fig.text(.955,.22,f'{sensor} swath',rotation=90,ha='center',va='center',fontweight='bold')
-            fig.suptitle(f'{sensor} – DPR Coincidence {number}',fontsize=17,fontweight='bold')
+            for row_index, label in [(1, 'DPR swath'), (2, f'{sensor} swath')]:
+                bounds = gs[row_index, 2].get_position(fig)
+                fig.text(.955, (bounds.y0+bounds.y1)/2, label, rotation=90, ha='center', va='center', fontweight='bold')
+            fig.suptitle(f'{sensor} – DPR Coincidence {number}', y=.985, fontsize=18, fontweight='bold')
+            fig.text(.5, .951, f'DPR: {Path(df).name}', ha='center', va='top', fontsize=10, fontweight='bold')
+            fig.text(.5, .930, f'{sensor}: {Path(pf).name}', ha='center', va='top', fontsize=10, fontweight='bold')
             path=Path(out).with_name(f'{Path(out).stem}_{Path(pf).stem}_intersection_{number:02d}.png')
             _finish(fig,path,show); print(f'[FIGURE] {path}')
