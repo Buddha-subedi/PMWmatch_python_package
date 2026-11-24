@@ -176,7 +176,7 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
             ax.add_patch(Rectangle((-half_lon,south),2*half_lon,north-south,transform=local,fill=False,ec='black',lw=1.2,label='Coincidence region'))
             ax.plot(lon0,lat0,'ko',ms=5,transform=geo)
             ax.annotate(f"ΔT: {cross['delta_minutes']:.2f} min",xy=(lon0,lat0),xycoords=geo._as_mpl_transform(ax),xytext=(10,-12),textcoords='offset points',fontsize=11,fontweight='bold',bbox=dict(fc='white',alpha=.8,ec='none'))
-            ax.legend(loc='lower center',ncol=3,fontsize=10); ax.text(.01,.97,'(a)',transform=ax.transAxes,va='top',fontsize=12,fontweight='bold')
+            ax.legend(loc='lower center', ncol=3, prop={'size': 12, 'weight': 'bold'}); ax.text(.01,.97,'(a)',transform=ax.transAxes,va='top',fontsize=14,fontweight='bold')
             gl=ax.gridlines(draw_labels=True,linewidth=.3,linestyle='--',alpha=.5); gl.right_labels=False; gl.bottom_labels=False; gl.xlabel_style={'weight':'bold','size':12}; gl.ylabel_style={'weight':'bold','size':12}
             def mesh(ax,s,z,mask,norm):
                 # Crop to relevant scan rows and columns; scatter only if invalid coordinates prevent pcolormesh.
@@ -192,7 +192,7 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
                 for row,axr in enumerate(axes):
                     axr.set_extent([-half_lon,half_lon,south,north],crs=local); axr.set_aspect('auto'); axr.set_box_aspect(0.60); axr.set_anchor('C'); axr.coastlines('50m',linewidth=.4,color='gray')
                     gl=axr.gridlines(draw_labels=True,linewidth=.3,linestyle='--',alpha=.5); gl.top_labels=False; gl.right_labels=False; gl.left_labels=col==0; gl.bottom_labels=row==1; gl.xlocator=MaxNLocator(3); gl.ylocator=MaxNLocator(3); gl.xlabel_style={'weight':'bold'}; gl.ylabel_style={'weight':'bold'}
-                    axr.text(.02,.97,f'({chr(98+row*3+col)})',transform=axr.transAxes,va='top',fontweight='bold',zorder=10)
+                    axr.text(.02,.97,f'({chr(98+row*3+col)})',transform=axr.transAxes,va='top',fontsize=13,fontweight='bold',zorder=10)
                 if choice is None:
                     for axr in axes: axr.text(.5,.5,'No verified channel\nwith regional matches',transform=axr.transAxes,ha='center',va='center',fontsize=9)
                     continue
@@ -208,7 +208,7 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
                 bounds = gs_rows[row_index-1][0,2].get_position(fig)
                 fig.text(right+.012, (bounds.y0+bounds.y1)/2, label, rotation=90, ha='center', va='center', fontweight='bold')
             fig.suptitle(f'{sensor} – DPR Coincidence {number}', y=.985, fontsize=19, fontweight='bold')
-            fig.text(.5, .951, f'DPR: {Path(df).name}', ha='center', va='top', fontsize=10, fontweight='bold')
-            fig.text(.5, .930, f'{sensor}: {Path(pf).name}', ha='center', va='top', fontsize=10, fontweight='bold')
+            fig.text(.5, .951, f'DPR: {Path(df).name}', ha='center', va='top', fontsize=12, fontweight='bold')
+            fig.text(.5, .930, f'{sensor}: {Path(pf).name}', ha='center', va='top', fontsize=12, fontweight='bold')
             path=Path(out).with_name(f'{Path(out).stem}_{Path(pf).stem}_intersection_{number:02d}.png')
             _finish(fig,path,show); print(f'[FIGURE] {path}')
