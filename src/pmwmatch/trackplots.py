@@ -41,14 +41,9 @@ def _finish(fig,path,show):
         display(Image(filename=str(path)))
     plt.close(fig)
 
-def plot_grid(p,out,minutes,km,show):
-    import matplotlib.pyplot as plt
-    import cartopy.crs as ccrs
-    fig,axes=plt.subplots(2,2,figsize=(14,8),subplot_kw={'projection':ccrs.PlateCarree()},layout='constrained')
-    mask=p['coincidence_mask'].any(-1); lat=p['latitude']; lon=p['longitude']; ok=np.isfinite(lat)&np.isfinite(lon)&(abs(lat)<=90)
-    for ax,v,title,cmap,lim in zip(axes.flat,[p['dpr_precipitation'],mask.astype(float),np.max(np.where(np.isfinite(p['delta_t_minutes']),p['delta_t_minutes'],-np.inf),axis=-1),np.max(np.where(np.isfinite(p['distance_km']),p['distance_km'],-np.inf),axis=-1)],['DPR precipitation (mm/h)','Coincidence mask','Maximum time difference (min)','Maximum distance (km)'],['turbo','Greens','viridis','plasma'],[10,1,minutes,km]):
-        valid=ok&np.isfinite(v); ax.set_global(); ax.coastlines(); im=ax.scatter(lon[valid],lat[valid],c=v[valid],s=2,cmap=cmap,vmin=0,vmax=lim,transform=ccrs.PlateCarree()); ax.set_title(title); fig.colorbar(im,ax=ax,orientation='horizontal',shrink=.7)
-    _finish(fig,out.with_name(out.stem+'_grid.png'),show)
+def plot_grid(p, out, minutes, km, show):
+    """Disabled legacy diagnostic plot; retained for API compatibility."""
+    return None
 
 # Explicit frequency overrides: (swath, zero-based channel): GHz.
 # Add entries only after checking the product's channel documentation.
