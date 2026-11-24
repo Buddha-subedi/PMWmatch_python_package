@@ -1,0 +1,25 @@
+workflow: PMWMRMS
+pmw_file: /scratch.global/1subed042/pmwmatch/raw/GMI_FILE.HDF5
+reference_file: /scratch.global/1subed042/pmwmatch/raw/MRMS_FILE.nc
+output_file: /scratch.global/1subed042/pmwmatch/results/gmi_mrms.npz
+plot: true
+pmw_reader:
+  lat_path: S1/Latitude
+  lon_path: S1/Longitude
+  tb_path: S1/Tc
+  time_components:
+    year: S1/ScanTime/Year
+    month: S1/ScanTime/Month
+    day: S1/ScanTime/DayOfMonth
+    hour: S1/ScanTime/Hour
+    minute: S1/ScanTime/Minute
+    second: S1/ScanTime/Second
+reference_reader:
+  variable: precipitation
+  lat_name: latitude
+  lon_name: longitude
+  time_name: time
+matching:
+  pixel_time_minutes: 7.5
+  max_distance_km: 214
+  enforce_distance: true
