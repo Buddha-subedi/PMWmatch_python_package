@@ -40,22 +40,431 @@ def _finish(fig,path,show):
         display(Image(filename=str(path)))
     plt.close(fig)
 
-def plot_pair(df,pf,dpr,swaths,matches,out,minutes,km,show):
+def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
+
     import matplotlib.pyplot as plt
     import cartopy.crs as ccrs
     import cartopy.feature as cf
-    g=next(iter(swaths)); a=track(df,'FS',dpr); b=track(pf,g,swaths[g]); ev=events(a,b,minutes,km)
-    fig,ax=plt.subplots(figsize=(13,7),subplot_kw={'projection':ccrs.PlateCarree()}); ax.set_global(); ax.stock_img(); ax.coastlines(linewidth=.6); ax.add_feature(cf.BORDERS,linewidth=.3)
-    gl=ax.gridlines(draw_labels=True,linestyle='--',alpha=.4); gl.top_labels=False; gl.right_labels=False
-    for tr,color,label in [(a,'red','DPR'),(b,'blue','PMW')]:
-        lon=tr[1].copy(); lon[1:][abs(np.diff(lon))>180]=np.nan
-        ax.plot(lon,tr[0],color=color,lw=1.7,transform=ccrs.PlateCarree(),label=label+(' (central footprint)' if tr[3]=='central footprint' else ' spacecraft track'))
-    mask=np.logical_or.reduce([np.isfinite(r['pmw_tb']).any(axis=-1) for r in matches]); ax.scatter(dpr['lon'][mask],dpr['lat'][mask],s=1,c='limegreen',transform=ccrs.PlateCarree(),label='Matched DPR footprints')
-    fmt=lambda t:datetime.fromtimestamp(t,timezone.utc).strftime('%H:%M:%S')
-    for i,j in ev:
-        lat,lon=a[0][i],a[1][i]; ax.plot(lon,lat,'ko',transform=ccrs.PlateCarree()); ax.annotate(f'Δt: {abs(a[2][i]-b[2][j])/60:.1f} min\nDPR: {fmt(a[2][i])}\nPMW: {fmt(b[2][j])}',(lon,lat),xytext=(-12 if lon>130 else 12,-15 if lat>55 else 12),textcoords='offset points',ha='right' if lon>130 else 'left',va='top' if lat>55 else 'bottom',fontsize=8,bbox=dict(fc='white',alpha=.85),arrowprops=dict(arrowstyle='-'))
-    ax.legend(loc='upper right',fontsize=8); ax.set_title(f'DPR: {Path(df).name}\nPMW: {Path(pf).name}\n{mask.sum():,} matched DPR pixels; {len(ev)} track proximity events',fontsize=10)
-    _finish(fig,out.with_name(out.stem+'_'+Path(pf).stem+'_tracks.png'),show)
+
+    from pathlib import Path
+    from datetime import datetime, timezone
+
+    # ========================================================
+    # IDENTIFY MICROWAVE SENSOR
+    # ========================================================
+
+    sensor = Path(pf).name.split(".")[2].upper()
+
+    # ========================================================
+    # EXTRACT SATELLITE TRACKS AND COINCIDENCE EVENTS
+    # ========================================================
+
+    g = next(iter(swaths))
+
+    a = track(df, "FS", dpr)
+    b = track(pf, g, swaths[g])
+
+    ev = events(a, b, minutes, km)
+
+    # ========================================================
+    # INITIALIZE FIGURE
+    # ========================================================
+
+    fig = plt.figure(figsize=(10, 7))
+
+    ax = fig.add_subplot(
+        1, 1, 1,
+        projection=ccrs.PlateCarree()
+    )
+
+    ax.set_extent(
+        [-180, 180, -90, 90],
+        crs=ccrs.PlateCarree()
+    )
+
+    ax.stock_img()
+
+    ax.add_feature(
+        cf.COASTLINE,
+        linewidth=0.7
+    )
+
+    ax.add_feature(
+        cf.BORDERS,
+        linestyle=":",
+        linewidth=0.5
+    )
+
+    # ========================================================
+    # SATELLITE TRACKS
+    # ========================================================
+
+    dpr_line = ax.plot(
+        a[1],
+        a[0],
+        "r-",
+        transform=ccrs.Geodetic(),
+        linewidth=2,
+        zorder=2,
+        label="DPR track"
+    )
+
+    pmw_line = ax.plot(
+        b[1],
+        b[0],
+        "b-",
+        transform=ccrs.Geodetic(),
+        linewidth=2,
+        zorder=2,
+        label=f"{sensor} track"
+    )
+
+    # ========================================================
+    # COINCIDENCE ANNOTATION LOCATIONS
+    # ========================================================
+
+    annotation_locations = [
+        (a[1][i], a[0][i])
+        for i, j in ev
+    ]
+
+    # ========================================================
+    # AUTOMATIC LEGEND PLACEMENT
+    # ========================================================
+
+    legend_corners = {
+        "upper_left": {
+            "pos": (0.02, 0.96),
+            "anchor": "upper left",
+            "penalty": 0
+        },
+        "upper_right": {
+            "pos": (0.98, 0.96),
+            "anchor": "upper right",
+            "penalty": 0
+        },
+        "lower_left": {
+            "pos": (0.02, 0.03),
+            "anchor": "lower left",
+            "penalty": 10
+        },
+        "lower_right": {
+            "pos": (0.98, 0.03),
+            "anchor": "lower right",
+            "penalty": 10
+        }
+    }
+
+    for corner in legend_corners.values():
+
+        x_norm, y_norm = corner["pos"]
+
+        count = 0
+
+        for lon, lat in annotation_locations:
+
+            ax_pos = ax.projection.transform_point(
+                lon,
+                lat,
+                ccrs.PlateCarree()
+            )
+
+            ax_x = (
+                (ax_pos[0] - ax.get_xlim()[0])
+                / (ax.get_xlim()[1] - ax.get_xlim()[0])
+            )
+
+            ax_y = (
+                (ax_pos[1] - ax.get_ylim()[0])
+                / (ax.get_ylim()[1] - ax.get_ylim()[0])
+            )
+
+            if (
+                abs(ax_x - x_norm) < 0.3
+                and abs(ax_y - y_norm) < 0.3
+            ):
+                count += 1
+
+        corner["score"] = (
+            count * 10 + corner["penalty"]
+        )
+
+    best_corner = min(
+        legend_corners.values(),
+        key=lambda x: x["score"]
+    )
+
+    legend = ax.legend(
+        [dpr_line[0], pmw_line[0]],
+        ["DPR track", f"{sensor} track"],
+        loc=best_corner["anchor"],
+        bbox_to_anchor=best_corner["pos"],
+        frameon=True,
+        framealpha=0.7,
+        facecolor="white",
+        edgecolor="black",
+        fontsize=9
+    )
+
+    for text in legend.get_texts():
+        text.set_fontweight("bold")
+
+    # ========================================================
+    # GRIDLINES AND COORDINATE LABELS
+    # ========================================================
+
+    gl = ax.gridlines(
+        crs=ccrs.PlateCarree(),
+        draw_labels=True,
+        linewidth=0.5,
+        color="gray",
+        alpha=0.6,
+        linestyle="--"
+    )
+
+    gl.top_labels = False
+    gl.right_labels = False
+
+    gl.xlabel_style = {
+        "size": 10,
+        "weight": "bold"
+    }
+
+    gl.ylabel_style = {
+        "size": 10,
+        "weight": "bold"
+    }
+
+    # Explicit tick intervals matching the original figure.
+
+    gl.xlocator = plt.FixedLocator(
+        [-180, -120, -60, 0, 60, 120, 180]
+    )
+
+    gl.ylocator = plt.FixedLocator(
+        [-60, -30, 0, 30, 60]
+    )
+
+    # ========================================================
+    # FIGURE TITLE
+    # ========================================================
+
+    title = (
+        f"DPR: {Path(df).name}\n"
+        f"{sensor}: {Path(pf).name}"
+    )
+
+    ax.set_title(
+        title,
+        fontsize=12,
+        fontweight="bold",
+        pad=10
+    )
+
+    # Finalize map geometry before annotation positioning.
+
+    fig.canvas.draw()
+
+    # ========================================================
+    # COINCIDENCE ANNOTATIONS
+    # ========================================================
+
+    prev_annotations = []
+
+    collision_threshold = 1.5
+
+    def fmt(t):
+        return datetime.fromtimestamp(
+            float(t),
+            timezone.utc
+        ).strftime("%H:%M:%S")
+
+    for i, j in ev:
+
+        lat = a[0][i]
+        lon = a[1][i]
+
+        dpr_time = fmt(a[2][i])
+        pmw_time = fmt(b[2][j])
+
+        delta_t = abs(
+            a[2][i] - b[2][j]
+        ) / 60.0
+
+        annotation_text = (
+            f"ΔT: {delta_t:.1f} min\n"
+            f"DPR: {dpr_time}\n"
+            f"{sensor}: {pmw_time}"
+        )
+
+        # Default annotation position.
+
+        x_offset = 0
+        y_offset = 12
+
+        ha = "center"
+        va = "bottom"
+
+        bbox_props = dict(
+            boxstyle="round,pad=0.3",
+            fc="white",
+            ec="black",
+            lw=0.5,
+            alpha=0.7
+        )
+
+        # Longitude boundary handling.
+
+        if lon > 150:
+
+            x_offset = -15
+            ha = "right"
+
+        elif lon < -150:
+
+            x_offset = 15
+            ha = "left"
+
+        # Latitude boundary handling.
+
+        if lat > 60:
+
+            y_offset = -15
+            va = "top"
+
+        elif lat < -60:
+
+            y_offset = 15
+            va = "bottom"
+
+        # Avoid overlapping annotations.
+
+        for prev in prev_annotations:
+
+            if (
+                abs(lon - prev["lon"])
+                < collision_threshold
+                and abs(lat - prev["lat"])
+                < collision_threshold
+            ):
+
+                y_offset = -prev["y_offset"]
+
+                va = (
+                    "top"
+                    if va == "bottom"
+                    else "bottom"
+                )
+
+                break
+
+        # Convert geographic position to display coordinates.
+
+        transform = (
+            ccrs.PlateCarree()
+            ._as_mpl_transform(ax)
+        )
+
+        x_ax, y_ax = transform.transform(
+            (lon, lat)
+        )
+
+        # Convert annotation offset from points to pixels.
+
+        points_to_pixels = fig.dpi / 72.0
+
+        final_y = (
+            y_ax + y_offset * points_to_pixels
+        )
+
+        final_y_norm = (
+            (final_y - ax.bbox.y0)
+            / ax.bbox.height
+        )
+
+        if final_y_norm > 0.96:
+
+            y_offset -= (
+                (final_y_norm - 0.96)
+                * ax.bbox.height
+                / points_to_pixels
+            )
+
+        elif final_y_norm < 0.03:
+
+            y_offset += (
+                (0.03 - final_y_norm)
+                * ax.bbox.height
+                / points_to_pixels
+            )
+
+        prev_annotations.append({
+            "lon": lon,
+            "lat": lat,
+            "y_offset": y_offset
+        })
+
+        # Plot annotation.
+
+        ax.annotate(
+            annotation_text,
+            xy=(lon, lat),
+            xycoords=transform,
+            xytext=(x_offset, y_offset),
+            textcoords="offset points",
+            ha=ha,
+            va=va,
+            fontsize=9,
+            fontweight="bold",
+            bbox=bbox_props,
+            arrowprops=dict(
+                arrowstyle="->",
+                color="black",
+                linewidth=0.7
+            ),
+            zorder=9,
+            annotation_clip=True
+        )
+
+        # Black coincidence marker.
+
+        ax.plot(
+            lon,
+            lat,
+            "ko",
+            markersize=8,
+            transform=ccrs.Geodetic(),
+            zorder=9
+        )
+
+    # ========================================================
+    # SAVE AND DISPLAY FIGURE
+    # ========================================================
+
+    filename = out.with_name(
+        out.stem
+        + "_"
+        + Path(pf).stem
+        + "_tracks.png"
+    )
+
+    fig.savefig(
+        filename,
+        bbox_inches="tight",
+        dpi=400
+    )
+
+    if show:
+
+        from IPython.display import display, Image
+
+        display(
+            Image(filename=str(filename))
+        )
+
+    plt.close(fig)
+
+    print(f"[FIGURE SAVED] {filename}")
 
 def plot_grid(p,out,minutes,km,show):
     import matplotlib.pyplot as plt
