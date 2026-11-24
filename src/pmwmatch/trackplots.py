@@ -170,14 +170,14 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
             gs_global = fig.add_gridspec(1,1,left=left,right=right,top=top,bottom=global_bottom)
             gs_rows = [fig.add_gridspec(1,3,left=left,right=right,top=t,bottom=b,wspace=.05)
                        for t,b in [(row1_top,row1_bottom),(row2_top,row2_bottom),(cb_top,cb_top-.012)]]
-            ax=fig.add_subplot(gs_global[0,0],projection=local); ax.set_global(); ax.set_xlim(-180,180); ax.set_ylim(-90,90); ax.set_anchor('N'); ax.set_aspect('auto'); ax.set_box_aspect(0.5); ax.stock_img(); ax.coastlines('110m',linewidth=.55,color='black')
+            ax=fig.add_subplot(gs_global[0,0],projection=geo); ax.set_global(); ax.set_xlim(-180,180); ax.set_ylim(-90,90); ax.set_anchor('N'); ax.set_aspect('auto'); ax.set_box_aspect(0.5); ax.stock_img(); ax.coastlines('110m',linewidth=.55,color='black')
             for t,color,label in [(a,'blue','DPR track'),(b,'darkviolet',f'{sensor} track')]:
                 ax.plot(t[1],t[0],transform=ccrs.Geodetic(),color=color,lw=1.3,label=label)
             ax.add_patch(Rectangle((-half_lon,south),2*half_lon,north-south,transform=local,fill=False,ec='black',lw=1.2,label='Coincidence region'))
             ax.plot(lon0,lat0,'ko',ms=5,transform=geo)
             ax.annotate(f"ΔT: {cross['delta_minutes']:.2f} min",xy=(lon0,lat0),xycoords=geo._as_mpl_transform(ax),xytext=(10,-12),textcoords='offset points',fontsize=11,fontweight='bold',bbox=dict(fc='white',alpha=.8,ec='none'))
             ax.legend(loc='lower center', ncol=3, prop={'size': 12, 'weight': 'bold'}); ax.text(.01,.97,'(a)',transform=ax.transAxes,va='top',fontsize=14,fontweight='bold')
-            gl=ax.gridlines(draw_labels=True,linewidth=.3,linestyle='--',alpha=.5); gl.right_labels=False; gl.bottom_labels=False; gl.xlabel_style={'weight':'bold','size':12}; gl.ylabel_style={'weight':'bold','size':12}
+            gl=ax.gridlines(crs=geo,draw_labels=True,xlocs=np.arange(-180,181,60),ylocs=np.arange(-90,91,30),linewidth=.3,linestyle='--',alpha=.5); gl.right_labels=False; gl.bottom_labels=False; gl.xlabel_style={'weight':'bold','size':12}; gl.ylabel_style={'weight':'bold','size':12}
             def mesh(ax,s,z,mask,norm):
                 # Crop to relevant scan rows and columns; scatter only if invalid coordinates prevent pcolormesh.
                 ii,jj=np.where(mask & np.isfinite(z))
