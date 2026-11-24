@@ -116,7 +116,7 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
     for number,cross in enumerate(crossings,1):
         lon0,lat0 = cross['longitude'],cross['latitude']
         # Fixed regional extent; longitude relative to crossing.
-        half_lat = 15.0; half_lon = 20.0
+        half_lat = 15.0; half_lon = 25.0
         south,north = max(-90.,lat0-half_lat),min(90.,lat0+half_lat)
         wrap = lambda x: (np.asarray(x)-lon0+180)%360-180
         def region(s):
@@ -152,9 +152,9 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
         print(f'[SELECTED CHANNELS] {sensor}: {choices}')
         geo=ccrs.PlateCarree(); local=ccrs.PlateCarree(central_longitude=lon0)
         with plt.rc_context({'font.family':'serif','font.size':10}):
-            fig=plt.figure(figsize=(12,10))
-            gs=fig.add_gridspec(4,3,height_ratios=[2.5,1.15,1.15,.10],hspace=.20,wspace=.05,left=.08,right=.92,top=.875,bottom=.085)
-            ax=fig.add_subplot(gs[0,:],projection=local); ax.set_global(); ax.set_anchor('N'); ax.stock_img(); ax.coastlines('110m',linewidth=.55,color='black')
+            fig=plt.figure(figsize=(12,13.0))
+            gs=fig.add_gridspec(4,3,height_ratios=[5.04,1.98,1.98,.12],hspace=.17,wspace=.05,left=.08,right=.92,top=.875,bottom=.085)
+            ax=fig.add_subplot(gs[0,:],projection=local); ax.set_global(); ax.set_anchor('N'); ax.set_aspect('auto'); ax.set_box_aspect(0.5); ax.stock_img(); ax.coastlines('110m',linewidth=.55,color='black')
             for t,color,label in [(a,'blue','DPR track'),(b,'darkviolet',f'{sensor} track')]:
                 ax.plot(t[1],t[0],transform=ccrs.Geodetic(),color=color,lw=1.3,label=label)
             ax.add_patch(Rectangle((-half_lon,south),2*half_lon,north-south,transform=local,fill=False,ec='black',lw=1.2,label='Coincidence region'))
@@ -174,7 +174,7 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
             for col,choice in enumerate(choices):
                 axes=[fig.add_subplot(gs[row,col],projection=local) for row in (1,2)]
                 for row,axr in enumerate(axes):
-                    axr.set_extent([-half_lon,half_lon,south,north],crs=local); axr.set_aspect('auto'); axr.coastlines('50m',linewidth=.4,color='gray')
+                    axr.set_extent([-half_lon,half_lon,south,north],crs=local); axr.set_aspect('auto'); axr.set_box_aspect(0.60); axr.set_anchor('C'); axr.coastlines('50m',linewidth=.4,color='gray')
                     gl=axr.gridlines(draw_labels=True,linewidth=.3,linestyle='--',alpha=.5); gl.top_labels=False; gl.right_labels=False; gl.left_labels=col==0; gl.bottom_labels=row==1; gl.xlocator=MaxNLocator(3); gl.ylocator=MaxNLocator(3); gl.xlabel_style={'weight':'bold'}; gl.ylabel_style={'weight':'bold'}
                     axr.text(.02,.97,f'({chr(98+row*3+col)})',transform=axr.transAxes,va='top',fontweight='bold',zorder=10)
                 if choice is None:
