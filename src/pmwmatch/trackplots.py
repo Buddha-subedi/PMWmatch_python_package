@@ -151,17 +151,33 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
         choices.sort(key=lambda e:e[3])
         print(f'[SELECTED CHANNELS] {sensor}: {choices}')
         geo=ccrs.PlateCarree(); local=ccrs.PlateCarree(central_longitude=lon0)
-        with plt.rc_context({'font.family':'serif','font.size':10}):
+        with plt.rc_context({'font.family':'serif','font.size':11}):
             fig=plt.figure(figsize=(12,13.0))
-            gs=fig.add_gridspec(4,3,height_ratios=[5.04,1.98,1.98,.12],hspace=.17,wspace=.05,left=.08,right=.92,top=.875,bottom=.085)
-            ax=fig.add_subplot(gs[0,:],projection=local); ax.set_global(); ax.set_anchor('N'); ax.set_aspect('auto'); ax.set_box_aspect(0.5); ax.stock_img(); ax.coastlines('110m',linewidth=.55,color='black')
+            # Explicit row positions preserve equal panel widths and avoid
+            # GridSpec shrinking the global map to fit its row.
+            left, right = .065, .955
+            fw, fh = fig.get_size_inches()
+            global_h = (right-left)*fw/(2*fh)
+            regional_w = (right-left)/(3+2*.05)
+            regional_h = regional_w*fw*.60/fh
+            top = .895
+            global_bottom = top-global_h
+            row1_top = global_bottom-.043
+            row1_bottom = row1_top-regional_h
+            row2_top = row1_bottom-.028
+            row2_bottom = row2_top-regional_h
+            cb_top = row2_bottom-.045
+            gs_global = fig.add_gridspec(1,1,left=left,right=right,top=top,bottom=global_bottom)
+            gs_rows = [fig.add_gridspec(1,3,left=left,right=right,top=t,bottom=b,wspace=.05)
+                       for t,b in [(row1_top,row1_bottom),(row2_top,row2_bottom),(cb_top,cb_top-.012)]]
+            ax=fig.add_subplot(gs_global[0,0],projection=local); ax.set_global(); ax.set_xlim(-180,180); ax.set_ylim(-90,90); ax.set_anchor('N'); ax.set_aspect('auto'); ax.set_box_aspect(0.5); ax.stock_img(); ax.coastlines('110m',linewidth=.55,color='black')
             for t,color,label in [(a,'blue','DPR track'),(b,'darkviolet',f'{sensor} track')]:
                 ax.plot(t[1],t[0],transform=ccrs.Geodetic(),color=color,lw=1.3,label=label)
             ax.add_patch(Rectangle((-half_lon,south),2*half_lon,north-south,transform=local,fill=False,ec='black',lw=1.2,label='Coincidence region'))
             ax.plot(lon0,lat0,'ko',ms=5,transform=geo)
-            ax.annotate(f"ΔT: {cross['delta_minutes']:.2f} min",xy=(lon0,lat0),xycoords=geo._as_mpl_transform(ax),xytext=(10,-12),textcoords='offset points',fontsize=9,fontweight='bold',bbox=dict(fc='white',alpha=.8,ec='none'))
-            ax.legend(loc='lower center',ncol=3,fontsize=8); ax.text(.01,.97,'(a)',transform=ax.transAxes,va='top',fontweight='bold')
-            gl=ax.gridlines(draw_labels=True,linewidth=.3,linestyle='--',alpha=.5); gl.right_labels=False; gl.bottom_labels=False; gl.xlabel_style={'weight':'bold'}; gl.ylabel_style={'weight':'bold'}
+            ax.annotate(f"ΔT: {cross['delta_minutes']:.2f} min",xy=(lon0,lat0),xycoords=geo._as_mpl_transform(ax),xytext=(10,-12),textcoords='offset points',fontsize=11,fontweight='bold',bbox=dict(fc='white',alpha=.8,ec='none'))
+            ax.legend(loc='lower center',ncol=3,fontsize=10); ax.text(.01,.97,'(a)',transform=ax.transAxes,va='top',fontsize=12,fontweight='bold')
+            gl=ax.gridlines(draw_labels=True,linewidth=.3,linestyle='--',alpha=.5); gl.right_labels=False; gl.bottom_labels=False; gl.xlabel_style={'weight':'bold','size':12}; gl.ylabel_style={'weight':'bold','size':12}
             def mesh(ax,s,z,mask,norm):
                 # Crop to relevant scan rows and columns; scatter only if invalid coordinates prevent pcolormesh.
                 ii,jj=np.where(mask & np.isfinite(z))
@@ -172,13 +188,13 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
                     return ax.pcolormesh(x,y,v,transform=local,shading='auto',cmap='jet',norm=norm,rasterized=True)
                 return ax.scatter(wrap(s['lon'][ii,jj]),s['lat'][ii,jj],c=z[ii,jj],s=2,transform=local,cmap='jet',norm=norm,rasterized=True)
             for col,choice in enumerate(choices):
-                axes=[fig.add_subplot(gs[row,col],projection=local) for row in (1,2)]
+                axes=[fig.add_subplot(gs_rows[row-1][0,col],projection=local) for row in (1,2)]
                 for row,axr in enumerate(axes):
                     axr.set_extent([-half_lon,half_lon,south,north],crs=local); axr.set_aspect('auto'); axr.set_box_aspect(0.60); axr.set_anchor('C'); axr.coastlines('50m',linewidth=.4,color='gray')
                     gl=axr.gridlines(draw_labels=True,linewidth=.3,linestyle='--',alpha=.5); gl.top_labels=False; gl.right_labels=False; gl.left_labels=col==0; gl.bottom_labels=row==1; gl.xlocator=MaxNLocator(3); gl.ylocator=MaxNLocator(3); gl.xlabel_style={'weight':'bold'}; gl.ylabel_style={'weight':'bold'}
                     axr.text(.02,.97,f'({chr(98+row*3+col)})',transform=axr.transAxes,va='top',fontweight='bold',zorder=10)
                 if choice is None:
-                    for axr in axes: axr.text(.5,.5,'No verified channel\nwith regional matches',transform=axr.transAxes,ha='center',va='center',fontsize=8)
+                    for axr in axes: axr.text(.5,.5,'No verified channel\nwith regional matches',transform=axr.transAxes,ha='center',va='center',fontsize=9)
                     continue
                 _,g,i,f=choice; src=swaths[g]; mapped=pair[g]['pmw_tb'][...,i]; native=src['data'][...,i]; sm=region(src)
                 vals=np.concatenate([mapped[dm & np.isfinite(mapped)],native[sm & np.isfinite(native)]])
@@ -186,12 +202,12 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
                 im=mesh(axes[0],dpr,mapped,dm,norm); mesh(axes[1],src,native,sm,norm)
                 for axr in axes:
                     for j in (0,-1): axr.plot(wrap(dpr['lon'][:,j]),dpr['lat'][:,j],transform=local,color='black',lw=.45)
-                axes[0].set_title(f'{f:g} GHz ({g}, ch {i+1})',fontsize=10,fontweight='bold')
-                cb=fig.colorbar(im,cax=fig.add_subplot(gs[3,col]),orientation='horizontal'); cb.set_label(f'TB {f:g} GHz (K)'); cb.locator=MaxNLocator(4); cb.update_ticks()
+                axes[0].set_title(f'{f:g} GHz ({g}, ch {i+1})',fontsize=11,fontweight='bold')
+                cb=fig.colorbar(im,cax=fig.add_subplot(gs_rows[2][0,col]),orientation='horizontal'); cb.set_label(f'TB {f:g} GHz (K)',fontsize=11,fontweight='bold'); cb.locator=MaxNLocator(4); cb.update_ticks(); cb.ax.tick_params(axis='x',labelsize=11,width=1.4,length=4); plt.setp(cb.ax.get_xticklabels(),fontweight='bold')
             for row_index, label in [(1, 'DPR swath'), (2, f'{sensor} swath')]:
-                bounds = gs[row_index, 2].get_position(fig)
-                fig.text(.955, (bounds.y0+bounds.y1)/2, label, rotation=90, ha='center', va='center', fontweight='bold')
-            fig.suptitle(f'{sensor} – DPR Coincidence {number}', y=.985, fontsize=18, fontweight='bold')
+                bounds = gs_rows[row_index-1][0,2].get_position(fig)
+                fig.text(right+.012, (bounds.y0+bounds.y1)/2, label, rotation=90, ha='center', va='center', fontweight='bold')
+            fig.suptitle(f'{sensor} – DPR Coincidence {number}', y=.985, fontsize=19, fontweight='bold')
             fig.text(.5, .951, f'DPR: {Path(df).name}', ha='center', va='top', fontsize=10, fontweight='bold')
             fig.text(.5, .930, f'{sensor}: {Path(pf).name}', ha='center', va='top', fontsize=10, fontweight='bold')
             path=Path(out).with_name(f'{Path(out).stem}_{Path(pf).stem}_intersection_{number:02d}.png')
