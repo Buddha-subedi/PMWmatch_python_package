@@ -1,0 +1,36 @@
+# Replace dataset paths after inspecting your PPS HDF5 product.
+workflow: PMWDPR
+pmw_file: /scratch.global/1subed042/pmwDPR/raw/GMI_FILE.HDF5
+reference_file: /scratch.global/1subed042/pmwDPR/raw/DPR_FILE.HDF5
+output_file: /scratch.global/1subed042/pmwDPR/results/gmi_dpr.npz
+orbit_figure: /scratch.global/1subed042/pmwDPR/results/gmi_dpr_orbits.png
+plot: true
+pmw_reader:
+  lat_path: S1/Latitude
+  lon_path: S1/Longitude
+  tb_path: S1/Tc
+  time_components:
+    year: S1/ScanTime/Year
+    month: S1/ScanTime/Month
+    day: S1/ScanTime/DayOfMonth
+    hour: S1/ScanTime/Hour
+    minute: S1/ScanTime/Minute
+    second: S1/ScanTime/Second
+    millisecond: S1/ScanTime/MilliSecond
+reference_reader:
+  lat_path: FS/Latitude
+  lon_path: FS/Longitude
+  precip_path: FS/SLV/precipRateNearSurface
+  time_components:
+    year: FS/ScanTime/Year
+    month: FS/ScanTime/Month
+    day: FS/ScanTime/DayOfMonth
+    hour: FS/ScanTime/Hour
+    minute: FS/ScanTime/Minute
+    second: FS/ScanTime/Second
+matching:
+  same_platform: true
+  require_centerline: false
+  pixel_time_minutes: 7.5
+  max_distance_km: 214
+  enforce_distance: true
