@@ -45,12 +45,21 @@ def plot_grid(p, out, minutes, km, show):
     """Disabled legacy diagnostic plot; retained for API compatibility."""
     return None
 
-# Explicit frequency overrides: (swath, zero-based channel): GHz.
-# Add entries only after checking the product's channel documentation.
-# ATMS GPM 1C swath layout: only use when channel counts agree.
-ATMS_LAYOUT = {'S1': [23.8], 'S2': [31.4],
-               'S3': [50.3,51.76,52.8,53.596,54.4,54.94,55.5,57.29,57.29,57.29,57.29,57.29,57.29],
-               'S4': [88.2,165.5,183.31,183.31,183.31,183.31,183.31]}
+# GPM Level 1C nominal center frequencies (GHz), in stored channel order.
+# Reference: GPM Constellation L1C Product Format, sections 1, 3–6.
+# Sideband channels are represented by their nominal center frequency.
+SENSOR_LAYOUTS = {
+    'ATMS': {'S1':[23.8], 'S2':[31.4], 'S3':[88.2],
+             'S4':[165.5,183.31,183.31,183.31,183.31,183.31]},
+    'AMSR2': {'S1':[10.65,10.65], 'S2':[18.7,18.7],
+              'S3':[23.8,23.8], 'S4':[36.5,36.5],
+              'S5':[89,89], 'S6':[89,89]},
+    'GMI': {'S1':[10.65,10.65,18.7,18.7,23.8,36.5,36.5,89,89],
+            'S2':[166,166,183.31,183.31]},
+    'MHS': {'S1':[89,157,183.31,183.31,190.31]},
+    'SSMIS': {'S1':[19.35,19.35,22.235], 'S2':[37,37],
+              'S3':[150,183.31,183.31,183.31], 'S4':[91.665,91.665]},
+}
 FREQUENCY_OVERRIDES = {}
 
 def channel_frequencies(path, sensor, swaths):
@@ -73,13 +82,15 @@ def channel_frequencies(path, sensor, swaths):
                     except (ValueError,TypeError): continue
                     if np.all((f > 0)&(f < 1000)):
                         result.update({(g,i):float(x) for i,x in enumerate(f)})
-    if sensor == 'SSMIS' and all(g in swaths and swaths[g]['data'].shape[-1]==len(f) for g,f in {'S1':[19.35,19.35,22.235],'S2':[37,37],'S3':[150,183.31,183.31,183.31],'S4':[91.665,91.665]}.items()):
-        for g, fs in {'S1':[19.35,19.35,22.235],'S2':[37,37],'S3':[150,183.31,183.31,183.31],'S4':[91.665,91.665]}.items():
-            for i,f in enumerate(fs): result.setdefault((g,i),f)
-    if sensor == 'ATMS':
-        for g, fs in ATMS_LAYOUT.items():
-            if g in swaths and swaths[g]['data'].shape[-1] == len(fs):
-                for i,f in enumerate(fs): result.setdefault((g,i),f)
+    for g, fs in SENSOR_LAYOUTS.get(sensor, {}).items():
+        if g not in swaths:
+            continue
+        n = swaths[g]['data'].shape[-1]
+        if n == len(fs):
+            for i, f in enumerate(fs):
+                result.setdefault((g, i), f)
+        else:
+            print(f'[CHANNEL WARNING] {sensor} {g}: expected {len(fs)}, found {n}; using metadata only')
     result.update(FREQUENCY_OVERRIDES.get(sensor, {}))
     print('[CHANNELS]', sensor, {g: src['data'].shape[-1] for g,src in swaths.items()}, result)
     return result
@@ -104,27 +115,41 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
     pair = dict(zip(swaths,matches))
     for number,cross in enumerate(crossings,1):
         lon0,lat0 = cross['longitude'],cross['latitude']
-        # Regional width adjusted for latitude; longitude relative to crossing.
+        # Fixed regional extent; longitude relative to crossing.
         half_lat = 10.0; half_lon = 15.0
-        south,north = max(-89.9,lat0-half_lat),min(89.9,lat0+half_lat)
+        south,north = max(-90.,lat0-half_lat),min(90.,lat0+half_lat)
         wrap = lambda x: (np.asarray(x)-lon0+180)%360-180
         def region(s):
             return (abs(wrap(s['lon']))<=half_lon)&(s['lat']>=south)&(s['lat']<=north)&np.isfinite(s['lat'])&np.isfinite(s['lon'])
         dm = region(dpr)
+        eligible = []
+        for (g,i),f in frequencies.items():
+            if g not in pair or not 0 <= i < swaths[g]['data'].shape[-1]:
+                continue
+            mapped = pair[g]['pmw_tb'][...,i]
+            native = swaths[g]['data'][...,i]
+            count = np.count_nonzero(dm & np.isfinite(mapped))
+            if count and np.any(region(swaths[g]) & np.isfinite(native)):
+                eligible.append((count,g,i,f))
         choices = []
-        for low,high in [(0,30),(30,90),(90,np.inf)]:
-            eligible=[]
-            for (g,i),f in frequencies.items():
-                if g not in pair or not 0<=i<swaths[g]['data'].shape[-1]: continue
-                if not (low < f <= high): continue
-                mapped=pair[g]['pmw_tb'][...,i]; native=swaths[g]['data'][...,i]
-                count=np.count_nonzero(dm & np.isfinite(mapped))
-                if count and np.any(region(swaths[g]) & np.isfinite(native)):
-                    eligible.append((count,g,i,f))
-            choices.append(max(eligible) if eligible else None)
+        for low, high in [(0,30),(30,90),(90,np.inf)]:
+            options = [e for e in eligible if low < e[3] <= high]
+            choices.append(max(options) if options else None)
+        # If the instrument lacks a band, prefer a different nominal
+        # frequency; then allow another polarization/sideband channel.
+        for k, choice in enumerate(choices):
+            if choice is not None:
+                continue
+            used = [e for e in choices if e is not None]
+            remaining = [e for e in eligible if e not in used]
+            if remaining:
+                choices[k] = max(remaining, key=lambda e: (e[3] not in {u[3] for u in used}, e[0]))
+                print(f'[BAND FALLBACK] {sensor}: column {k+1} uses {choices[k][3]:g} GHz')
         if any(choice is None for choice in choices):
-            print(f'[SKIP FIGURE] {sensor} intersection {number}: missing verified frequency or regional matched TBs; choices={choices}')
+            print(f'[SKIP FIGURE] {sensor} intersection {number}: fewer than three usable channels; choices={choices}')
             continue
+        choices.sort(key=lambda e:e[3])
+        print(f'[SELECTED CHANNELS] {sensor}: {choices}')
         geo=ccrs.PlateCarree(); local=ccrs.PlateCarree(central_longitude=lon0)
         with plt.rc_context({'font.family':'serif','font.size':10}):
             fig=plt.figure(figsize=(10,8.4))
