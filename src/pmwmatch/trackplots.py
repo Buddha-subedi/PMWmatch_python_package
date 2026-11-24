@@ -41,438 +41,6 @@ def _finish(fig,path,show):
         display(Image(filename=str(path)))
     plt.close(fig)
 
-def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
-
-    import matplotlib.pyplot as plt
-    import cartopy.crs as ccrs
-    import cartopy.feature as cf
-
-    from pathlib import Path
-    from datetime import datetime, timezone
-
-    # ========================================================
-    # IDENTIFY MICROWAVE SENSOR
-    # ========================================================
-
-    sensor = Path(pf).name.split(".")[2].upper()
-
-    # ========================================================
-    # EXTRACT SATELLITE TRACKS AND COINCIDENCE EVENTS
-    # ========================================================
-
-    g = next(iter(swaths))
-
-    a = track(df, "FS", dpr)
-    b = track(pf, g, swaths[g])
-
-    def as_swath(tr):
-        return {k: np.asarray(v)[:, None] for k, v in zip(('lat', 'lon', 'time'), tr[:3])}
-
-    annotations = find_intersections(as_swath(b), as_swath(a),
-                                     coincidence_minutes=np.inf, search_radius_km=km)
-    # Keep only genuine crossings within the requested time tolerance.
-    annotations = [c for c in annotations
-                   if np.isfinite(c['delta_minutes'])
-                   and abs(c['delta_minutes']) <= minutes]
-    print(f"[TRACK] DPR / {sensor}: {len(annotations)} valid geometric intersections within ±{minutes} min")
-    if not annotations:
-        print("[SKIP TRACK PLOT] No time-valid geometric intersection")
-        return
-
-    # ========================================================
-    # INITIALIZE FIGURE
-    # ========================================================
-
-    fig = plt.figure(figsize=(10, 7))
-
-    ax = fig.add_subplot(
-        1, 1, 1,
-        projection=ccrs.PlateCarree()
-    )
-
-    ax.set_extent(
-        [-180, 180, -90, 90],
-        crs=ccrs.PlateCarree()
-    )
-
-    ax.stock_img()
-
-    ax.add_feature(
-        cf.COASTLINE,
-        linewidth=0.7
-    )
-
-    ax.add_feature(
-        cf.BORDERS,
-        linestyle=":",
-        linewidth=0.5
-    )
-
-    # ========================================================
-    # SATELLITE TRACKS
-    # ========================================================
-
-    dpr_line = ax.plot(
-        a[1],
-        a[0],
-        "r-",
-        transform=ccrs.Geodetic(),
-        linewidth=2,
-        zorder=2,
-        label="DPR track"
-    )
-
-    pmw_line = ax.plot(
-        b[1],
-        b[0],
-        "b-",
-        transform=ccrs.Geodetic(),
-        linewidth=2,
-        zorder=2,
-        label=f"{sensor} track"
-    )
-
-    # ========================================================
-    # COINCIDENCE ANNOTATION LOCATIONS
-    # ========================================================
-
-    annotation_locations = [
-        (c["longitude"], c["latitude"])
-        for c in annotations
-    ]
-
-    # ========================================================
-    # AUTOMATIC LEGEND PLACEMENT
-    # ========================================================
-
-    legend_corners = {
-        "upper_left": {
-            "pos": (0.02, 0.96),
-            "anchor": "upper left",
-            "penalty": 0
-        },
-        "upper_right": {
-            "pos": (0.98, 0.96),
-            "anchor": "upper right",
-            "penalty": 0
-        },
-        "lower_left": {
-            "pos": (0.02, 0.03),
-            "anchor": "lower left",
-            "penalty": 10
-        },
-        "lower_right": {
-            "pos": (0.98, 0.03),
-            "anchor": "lower right",
-            "penalty": 10
-        }
-    }
-
-    for corner in legend_corners.values():
-
-        x_norm, y_norm = corner["pos"]
-
-        count = 0
-
-        for lon, lat in annotation_locations:
-
-            ax_pos = ax.projection.transform_point(
-                lon,
-                lat,
-                ccrs.PlateCarree()
-            )
-
-            ax_x = (
-                (ax_pos[0] - ax.get_xlim()[0])
-                / (ax.get_xlim()[1] - ax.get_xlim()[0])
-            )
-
-            ax_y = (
-                (ax_pos[1] - ax.get_ylim()[0])
-                / (ax.get_ylim()[1] - ax.get_ylim()[0])
-            )
-
-            if (
-                abs(ax_x - x_norm) < 0.3
-                and abs(ax_y - y_norm) < 0.3
-            ):
-                count += 1
-
-        corner["score"] = (
-            count * 10 + corner["penalty"]
-        )
-
-    best_corner = min(
-        legend_corners.values(),
-        key=lambda x: x["score"]
-    )
-
-    legend = ax.legend(
-        [dpr_line[0], pmw_line[0]],
-        ["DPR track", f"{sensor} track"],
-        loc=best_corner["anchor"],
-        bbox_to_anchor=best_corner["pos"],
-        frameon=True,
-        framealpha=0.7,
-        facecolor="white",
-        edgecolor="black",
-        fontsize=9
-    )
-
-    for text in legend.get_texts():
-        text.set_fontweight("bold")
-
-    # ========================================================
-    # GRIDLINES AND COORDINATE LABELS
-    # ========================================================
-
-    gl = ax.gridlines(
-        crs=ccrs.PlateCarree(),
-        draw_labels=True,
-        linewidth=0.5,
-        color="gray",
-        alpha=0.6,
-        linestyle="--"
-    )
-
-    gl.top_labels = False
-    gl.right_labels = False
-
-    gl.xlabel_style = {
-        "size": 10,
-        "weight": "bold"
-    }
-
-    gl.ylabel_style = {
-        "size": 10,
-        "weight": "bold"
-    }
-
-    # Explicit tick intervals matching the original figure.
-
-    gl.xlocator = plt.FixedLocator(
-        [-180, -120, -60, 0, 60, 120, 180]
-    )
-
-    gl.ylocator = plt.FixedLocator(
-        [-60, -30, 0, 30, 60]
-    )
-
-    # ========================================================
-    # FIGURE TITLE
-    # ========================================================
-
-    title = (
-        f"DPR: {Path(df).name}\n"
-        f"{sensor}: {Path(pf).name}"
-    )
-
-    ax.set_title(
-        title,
-        fontsize=12,
-        fontweight="bold",
-        pad=10
-    )
-
-    # Finalize map geometry before annotation positioning.
-
-    fig.canvas.draw()
-
-    # ========================================================
-    # COINCIDENCE ANNOTATIONS
-    # ========================================================
-
-    prev_annotations = []
-
-    collision_threshold = 1.5
-
-    def fmt(t):
-        return datetime.fromtimestamp(
-            float(t),
-            timezone.utc
-        ).strftime("%H:%M:%S")
-
-    for c in annotations:
-        lat = c['latitude']
-        lon = c['longitude']
-        dpr_time = fmt(c['dpr_time'])
-        pmw_time = fmt(c['pmw_time'])
-        delta_t = c['delta_minutes']
-        annotation_text = (
-            f"ΔT: {delta_t:.1f} min\n"
-            f"DPR: {dpr_time}\n"
-            f"{sensor}: {pmw_time}"
-        )
-
-        # Default annotation position.
-
-        x_offset = 0
-        y_offset = 12
-
-        ha = "center"
-        va = "bottom"
-
-        bbox_props = dict(
-            boxstyle="round,pad=0.3",
-            fc="white",
-            ec="black",
-            lw=0.5,
-            alpha=0.7
-        )
-
-        # Longitude boundary handling.
-
-        if lon > 150:
-
-            x_offset = -15
-            ha = "right"
-
-        elif lon < -150:
-
-            x_offset = 15
-            ha = "left"
-
-        # Latitude boundary handling.
-
-        if lat > 60:
-
-            y_offset = -15
-            va = "top"
-
-        elif lat < -60:
-
-            y_offset = 15
-            va = "bottom"
-
-        # Avoid overlapping annotations.
-
-        for prev in prev_annotations:
-
-            if (
-                abs(lon - prev["lon"])
-                < collision_threshold
-                and abs(lat - prev["lat"])
-                < collision_threshold
-            ):
-
-                y_offset = -prev["y_offset"]
-
-                va = (
-                    "top"
-                    if va == "bottom"
-                    else "bottom"
-                )
-
-                break
-
-        # Convert geographic position to display coordinates.
-
-        transform = (
-            ccrs.PlateCarree()
-            ._as_mpl_transform(ax)
-        )
-
-        x_ax, y_ax = transform.transform(
-            (lon, lat)
-        )
-
-        # Convert annotation offset from points to pixels.
-
-        points_to_pixels = fig.dpi / 72.0
-
-        final_y = (
-            y_ax + y_offset * points_to_pixels
-        )
-
-        final_y_norm = (
-            (final_y - ax.bbox.y0)
-            / ax.bbox.height
-        )
-
-        if final_y_norm > 0.96:
-
-            y_offset -= (
-                (final_y_norm - 0.96)
-                * ax.bbox.height
-                / points_to_pixels
-            )
-
-        elif final_y_norm < 0.03:
-
-            y_offset += (
-                (0.03 - final_y_norm)
-                * ax.bbox.height
-                / points_to_pixels
-            )
-
-        prev_annotations.append({
-            "lon": lon,
-            "lat": lat,
-            "y_offset": y_offset
-        })
-
-        # Plot annotation.
-
-        ax.annotate(
-            annotation_text,
-            xy=(lon, lat),
-            xycoords=transform,
-            xytext=(x_offset, y_offset),
-            textcoords="offset points",
-            ha=ha,
-            va=va,
-            fontsize=9,
-            fontweight="bold",
-            bbox=bbox_props,
-            arrowprops=dict(
-                arrowstyle="->",
-                color="black",
-                linewidth=0.7
-            ),
-            zorder=9,
-            annotation_clip=True
-        )
-
-        # Black coincidence marker.
-
-        ax.plot(
-            lon,
-            lat,
-            "ko",
-            markersize=6,
-            transform=ccrs.Geodetic(),
-            zorder=9
-        )
-
-    # ========================================================
-    # SAVE AND DISPLAY FIGURE
-    # ========================================================
-
-    filename = out.with_name(
-        out.stem
-        + "_"
-        + Path(pf).stem
-        + "_tracks.png"
-    )
-
-    fig.savefig(
-        filename,
-        bbox_inches="tight",
-        dpi=400
-    )
-
-    if show:
-
-        from IPython.display import display, Image
-
-        display(
-            Image(filename=str(filename))
-        )
-
-    plt.close(fig)
-
-    print(f"[FIGURE SAVED] {filename}")
-
 def plot_grid(p,out,minutes,km,show):
     import matplotlib.pyplot as plt
     import cartopy.crs as ccrs
@@ -481,3 +49,114 @@ def plot_grid(p,out,minutes,km,show):
     for ax,v,title,cmap,lim in zip(axes.flat,[p['dpr_precipitation'],mask.astype(float),np.max(np.where(np.isfinite(p['delta_t_minutes']),p['delta_t_minutes'],-np.inf),axis=-1),np.max(np.where(np.isfinite(p['distance_km']),p['distance_km'],-np.inf),axis=-1)],['DPR precipitation (mm/h)','Coincidence mask','Maximum time difference (min)','Maximum distance (km)'],['turbo','Greens','viridis','plasma'],[10,1,minutes,km]):
         valid=ok&np.isfinite(v); ax.set_global(); ax.coastlines(); im=ax.scatter(lon[valid],lat[valid],c=v[valid],s=2,cmap=cmap,vmin=0,vmax=lim,transform=ccrs.PlateCarree()); ax.set_title(title); fig.colorbar(im,ax=ax,orientation='horizontal',shrink=.7)
     _finish(fig,out.with_name(out.stem+'_grid.png'),show)
+
+# Explicit frequency overrides: (swath, zero-based channel): GHz.
+# Add entries only after checking the product's channel documentation.
+FREQUENCY_OVERRIDES = {}
+
+def channel_frequencies(path, sensor, swaths):
+    result = {}
+    with h5py.File(path, 'r') as h:
+        for g, src in swaths.items():
+            n = src['data'].shape[-1]
+            group = h[g]
+            ds = group['Tc'] if 'Tc' in group else group['Tb']
+            for obj in (ds, group):
+                for key, val in obj.attrs.items():
+                    if 'frequen' not in key.lower(): continue
+                    try: f = np.asarray(val, dtype=float).ravel()
+                    except (ValueError, TypeError): continue
+                    if len(f) == n and np.all((f > 0) & (f < 1000)):
+                        result.update({(g,i): float(x) for i,x in enumerate(f)})
+            for key, obj in group.items():
+                if isinstance(obj,h5py.Dataset) and 'frequen' in key.lower() and obj.size == n:
+                    try: f = np.asarray(obj[...],dtype=float).ravel()
+                    except (ValueError,TypeError): continue
+                    if np.all((f > 0)&(f < 1000)):
+                        result.update({(g,i):float(x) for i,x in enumerate(f)})
+    if sensor == 'SSMIS' and all(g in swaths and swaths[g]['data'].shape[-1]==len(f) for g,f in {'S1':[19.35,19.35,22.235],'S2':[37,37],'S3':[150,183.31,183.31,183.31],'S4':[91.665,91.665]}.items()):
+        for g, fs in {'S1':[19.35,19.35,22.235],'S2':[37,37],'S3':[150,183.31,183.31,183.31],'S4':[91.665,91.665]}.items():
+            for i,f in enumerate(fs): result.setdefault((g,i),f)
+    result.update(FREQUENCY_OVERRIDES.get(sensor, {}))
+    return result
+
+def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
+    import matplotlib.pyplot as plt
+    import cartopy.crs as ccrs
+    from matplotlib.patches import Rectangle
+    from matplotlib.colors import Normalize
+    from matplotlib.ticker import MaxNLocator
+    sensor = Path(pf).name.split('.')[2].upper()
+    a = track(df,'FS',dpr)
+    g0 = next(iter(swaths))
+    b = track(pf,g0,swaths[g0])
+    def as_swath(t):
+        return {k: np.asarray(v)[:,None] for k,v in zip(('lat','lon','time'),t[:3])}
+    crossings = find_intersections(as_swath(b),as_swath(a),coincidence_minutes=np.inf,search_radius_km=km)
+    crossings = sorted((c for c in crossings if np.isfinite(c['delta_minutes']) and abs(c['delta_minutes']) <= minutes),key=lambda c:c['dpr_time'])
+    if not crossings:
+        print(f'[SKIP] {sensor}: no time-valid geometric intersection'); return
+    frequencies = channel_frequencies(pf,sensor,swaths)
+    pair = dict(zip(swaths,matches))
+    for number,cross in enumerate(crossings,1):
+        lon0,lat0 = cross['longitude'],cross['latitude']
+        # Regional width adjusted for latitude; longitude relative to crossing.
+        half_lat = 7.0; half_lon = 15.0
+        south,north = max(-89.9,lat0-half_lat),min(89.9,lat0+half_lat)
+        wrap = lambda x: (np.asarray(x)-lon0+180)%360-180
+        def region(s):
+            return (abs(wrap(s['lon']))<=half_lon)&(s['lat']>=south)&(s['lat']<=north)&np.isfinite(s['lat'])&np.isfinite(s['lon'])
+        dm = region(dpr)
+        choices = []
+        for low,high in [(0,30),(30,90),(90,np.inf)]:
+            eligible=[]
+            for (g,i),f in frequencies.items():
+                if g not in pair or not 0<=i<swaths[g]['data'].shape[-1]: continue
+                if not (low < f <= high): continue
+                mapped=pair[g]['pmw_tb'][...,i]; native=swaths[g]['data'][...,i]
+                count=np.count_nonzero(dm & np.isfinite(mapped))
+                if count and np.any(region(swaths[g]) & np.isfinite(native)):
+                    eligible.append((count,g,i,f))
+            choices.append(max(eligible) if eligible else None)
+        geo=ccrs.PlateCarree(); local=ccrs.PlateCarree(central_longitude=lon0)
+        with plt.rc_context({'font.family':'serif','font.size':10}):
+            fig=plt.figure(figsize=(10,8.4))
+            gs=fig.add_gridspec(4,3,height_ratios=[2.5,1,1,.10],hspace=.12,wspace=.05,left=.08,right=.92,top=.91,bottom=.09)
+            ax=fig.add_subplot(gs[0,:],projection=local); ax.set_global(); ax.coastlines('110m',linewidth=.45,color='gray')
+            for t,color,label in [(a,'blue','DPR track'),(b,'darkviolet',f'{sensor} track')]:
+                ax.plot(t[1],t[0],transform=ccrs.Geodetic(),color=color,lw=1.3,label=label)
+            ax.add_patch(Rectangle((-half_lon,south),2*half_lon,north-south,transform=local,fill=False,ec='black',lw=1.2,label='Coincidence region'))
+            ax.plot(lon0,lat0,'ko',ms=5,transform=geo)
+            ax.annotate(f"ΔT: {cross['delta_minutes']:.2f} min",xy=(lon0,lat0),xycoords=geo._as_mpl_transform(ax),xytext=(10,-12),textcoords='offset points',fontsize=9,fontweight='bold',bbox=dict(fc='white',alpha=.8,ec='none'))
+            ax.legend(loc='lower center',ncol=3,fontsize=8); ax.text(.01,.97,'(a)',transform=ax.transAxes,va='top',fontweight='bold')
+            gl=ax.gridlines(draw_labels=True,linewidth=.3,linestyle='--',alpha=.5); gl.right_labels=False; gl.bottom_labels=False
+            def mesh(ax,s,z,mask,norm):
+                # Crop to relevant scan rows and columns; scatter only if invalid coordinates prevent pcolormesh.
+                ii,jj=np.where(mask & np.isfinite(z))
+                if not len(ii): return None
+                sl=(slice(max(0,ii.min()-1),ii.max()+2),slice(max(0,jj.min()-1),jj.max()+2))
+                x=wrap(s['lon'][sl]); y=s['lat'][sl]; v=np.where(mask[sl],z[sl],np.nan)
+                if min(x.shape)>=2 and np.isfinite(x).all() and np.isfinite(y).all() and np.all(abs(y)<=90) and np.all(abs(np.diff(x,axis=0))<180) and np.all(abs(np.diff(x,axis=1))<180):
+                    return ax.pcolormesh(x,y,v,transform=local,shading='auto',cmap='jet',norm=norm,rasterized=True)
+                return ax.scatter(wrap(s['lon'][ii,jj]),s['lat'][ii,jj],c=z[ii,jj],s=2,transform=local,cmap='jet',norm=norm,rasterized=True)
+            for col,choice in enumerate(choices):
+                axes=[fig.add_subplot(gs[row,col],projection=local) for row in (1,2)]
+                for row,axr in enumerate(axes):
+                    axr.set_extent([-half_lon,half_lon,south,north],crs=local); axr.set_aspect('auto'); axr.coastlines('50m',linewidth=.4,color='gray')
+                    gl=axr.gridlines(draw_labels=True,linewidth=.3,linestyle='--',alpha=.5); gl.top_labels=False; gl.right_labels=False; gl.left_labels=col==0; gl.bottom_labels=row==1; gl.xlocator=MaxNLocator(3); gl.ylocator=MaxNLocator(3)
+                    axr.text(.02,.97,f'({chr(98+row*3+col)})',transform=axr.transAxes,va='top',fontweight='bold',zorder=10)
+                if choice is None:
+                    for axr in axes: axr.text(.5,.5,'No verified channel\nwith regional matches',transform=axr.transAxes,ha='center',va='center',fontsize=8)
+                    continue
+                _,g,i,f=choice; src=swaths[g]; mapped=pair[g]['pmw_tb'][...,i]; native=src['data'][...,i]; sm=region(src)
+                vals=np.concatenate([mapped[dm & np.isfinite(mapped)],native[sm & np.isfinite(native)]])
+                lo,hi=np.percentile(vals,[2,98]); norm=Normalize(lo,hi if hi>lo else lo+1)
+                im=mesh(axes[0],dpr,mapped,dm,norm); mesh(axes[1],src,native,sm,norm)
+                for axr in axes:
+                    for j in (0,-1): axr.plot(wrap(dpr['lon'][:,j]),dpr['lat'][:,j],transform=local,color='black',lw=.45)
+                axes[0].set_title(f'{f:g} GHz ({g}, ch {i+1})',fontsize=10,fontweight='bold')
+                cb=fig.colorbar(im,cax=fig.add_subplot(gs[3,col]),orientation='horizontal'); cb.set_label(f'TB {f:g} GHz (K)'); cb.locator=MaxNLocator(4); cb.update_ticks()
+            fig.text(.955,.40,'DPR swath',rotation=90,ha='center',va='center',fontweight='bold'); fig.text(.955,.22,f'{sensor} swath',rotation=90,ha='center',va='center',fontweight='bold')
+            fig.suptitle(f'{sensor} – DPR Coincidence {number}',fontsize=17,fontweight='bold')
+            path=Path(out).with_name(f'{Path(out).stem}_{Path(pf).stem}_intersection_{number:02d}.png')
+            _finish(fig,path,show); print(f'[FIGURE] {path}')
