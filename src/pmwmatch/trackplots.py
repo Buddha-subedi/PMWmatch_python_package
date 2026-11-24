@@ -70,12 +70,14 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
 
     annotations = find_intersections(as_swath(b), as_swath(a),
                                      coincidence_minutes=np.inf, search_radius_km=km)
-    for c in annotations:
-        c['valid'] = c['delta_minutes'] <= minutes
-        print(f"[CROSSING] lat={c['latitude']:.4f}, lon={c['longitude']:.4f}, "
-              f"delta_t={c['delta_minutes']:.2f} min, valid={c['valid']}")
-    print(f"[TRACK] DPR / {sensor}: {len(annotations)} geometric intersections; "
-          f"{sum(c['valid'] for c in annotations)} within time tolerance")
+    # Keep only genuine crossings within the requested time tolerance.
+    annotations = [c for c in annotations
+                   if np.isfinite(c['delta_minutes'])
+                   and abs(c['delta_minutes']) <= minutes]
+    print(f"[TRACK] DPR / {sensor}: {len(annotations)} valid geometric intersections within ±{minutes} min")
+    if not annotations:
+        print("[SKIP TRACK PLOT] No time-valid geometric intersection")
+        return
 
     # ========================================================
     # INITIALIZE FIGURE
@@ -296,9 +298,8 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
         dpr_time = fmt(c['dpr_time'])
         pmw_time = fmt(c['pmw_time'])
         delta_t = c['delta_minutes']
-        prefix = "" if c['valid'] else "Outside time tolerance\n"
         annotation_text = (
-            f"{prefix}ΔT: {delta_t:.1f} min\n"
+            f"ΔT: {delta_t:.1f} min\n"
             f"DPR: {dpr_time}\n"
             f"{sensor}: {pmw_time}"
         )
@@ -437,8 +438,8 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
         ax.plot(
             lon,
             lat,
-            "ko" if c["valid"] else "kx",
-            markersize=8,
+            "ko",
+            markersize=6,
             transform=ccrs.Geodetic(),
             zorder=9
         )
