@@ -116,7 +116,7 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
     for number,cross in enumerate(crossings,1):
         lon0,lat0 = cross['longitude'],cross['latitude']
         # Fixed regional extent; longitude relative to crossing.
-        half_lat = 15.0; half_lon = 25.0
+        half_lat = 20.0; half_lon = 30.0
         south,north = max(-90.,lat0-half_lat),min(90.,lat0+half_lat)
         wrap = lambda x: (np.asarray(x)-lon0+180)%360-180
         def region(s):
@@ -159,7 +159,7 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
             fw, fh = fig.get_size_inches()
             global_h = (right-left)*fw/(2*fh)
             regional_w = (right-left)/(3+2*.05)
-            regional_h = regional_w*fw*.60/fh
+            regional_h = regional_w*fw*(2/3)/fh
             top = .895
             global_bottom = top-global_h
             row1_top = global_bottom-.043
@@ -190,7 +190,7 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
             for col,choice in enumerate(choices):
                 axes=[fig.add_subplot(gs_rows[row-1][0,col],projection=local) for row in (1,2)]
                 for row,axr in enumerate(axes):
-                    axr.set_extent([-half_lon,half_lon,south,north],crs=local); axr.set_aspect('auto'); axr.set_box_aspect(0.60); axr.set_anchor('C'); axr.coastlines('50m',linewidth=.4,color='gray')
+                    axr.set_extent([-half_lon,half_lon,south,north],crs=local); axr.set_aspect('auto'); axr.set_box_aspect(2/3); axr.set_anchor('C'); axr.coastlines('50m',linewidth=.4,color='gray')
                     gl=axr.gridlines(draw_labels=True,linewidth=.3,linestyle='--',alpha=.5); gl.top_labels=False; gl.right_labels=False; gl.left_labels=col==0; gl.bottom_labels=row==1; gl.xlocator=MaxNLocator(3); gl.ylocator=MaxNLocator(3); gl.xlabel_style={'weight':'bold'}; gl.ylabel_style={'weight':'bold'}
                     axr.text(.02,.97,f'({chr(98+row*3+col)})',transform=axr.transAxes,va='top',fontsize=13,fontweight='bold',zorder=10)
                 if choice is None:
@@ -200,8 +200,12 @@ def plot_pair(df, pf, dpr, swaths, matches, out, minutes, km, show):
                 vals=np.concatenate([mapped[dm & np.isfinite(mapped)],native[sm & np.isfinite(native)]])
                 lo,hi=np.percentile(vals,[2,98]); norm=Normalize(lo,hi if hi>lo else lo+1)
                 im=mesh(axes[0],dpr,mapped,dm,norm); mesh(axes[1],src,native,sm,norm)
-                for axr in axes:
-                    for j in (0,-1): axr.plot(wrap(dpr['lon'][:,j]),dpr['lat'][:,j],transform=local,color='black',lw=.45)
+                for row, axr in enumerate(axes):
+                    for j in (0,-1):
+                        axr.plot(wrap(dpr['lon'][:,j]), dpr['lat'][:,j],
+                                 transform=local,
+                                 color='magenta' if row == 1 else 'black',
+                                 lw=1.3 if row == 1 else .45, zorder=5)
                 axes[0].set_title(f'{f:g} GHz ({g}, ch {i+1})',fontsize=11,fontweight='bold')
                 cb=fig.colorbar(im,cax=fig.add_subplot(gs_rows[2][0,col]),orientation='horizontal'); cb.set_label(f'TB {f:g} GHz (K)',fontsize=11,fontweight='bold'); cb.locator=MaxNLocator(4); cb.update_ticks(); cb.ax.tick_params(axis='x',labelsize=11,width=1.4,length=4); plt.setp(cb.ax.get_xticklabels(),fontweight='bold')
             for row_index, label in [(1, 'DPR swath'), (2, f'{sensor} swath')]:
