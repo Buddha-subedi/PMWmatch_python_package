@@ -3,7 +3,7 @@
 **Passive microwave–precipitation radar swath collocation in Python.**
 
 [![PyPI](https://img.shields.io/pypi/v/pmwDPR)](https://pypi.org/project/pmwDPR/)
-[![Python](https://img.shields.io/pypi/pyversions/pmwDPR)](https://pypi.org/project/pmwDPR/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 
 `pmwDPR` automates the discovery, downloading and spatiotemporal collocation of passive microwave (PMW) brightness temperatures with Global Precipitation Measurement (GPM) Dual-frequency Precipitation Radar (DPR) observations. It preserves the native DPR grid and provides channel-wise collocation information for precipitation retrieval, satellite intercomparison and machine-learning dataset development.
 
