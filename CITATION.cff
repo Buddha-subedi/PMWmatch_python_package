@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: If you use this software in your research, please cite it using the following
+  metadata.
+title: 'pmwDPR: A Python Package for Spatiotemporal Collocation of Passive Microwave
+  and Dual-Frequency Precipitation Radar Observations'
+type: software
+authors:
+- given-names: Buddha
+  family-names: Subedi
+  affiliation: University of Minnesota
+abstract: An open-source Python package for automated downloading, spatiotemporal
+  collocation, and visualization of satellite passive microwave brightness temperatures
+  and GPM Dual-Frequency Precipitation Radar observations.
+url: https://pypi.org/project/pmwDPR/
+keywords:
+- Passive microwave
+- Dual-Frequency Precipitation Radar
+- GPM
+- Satellite remote sensing
+- Precipitation
+- Spatiotemporal collocation
+- Precipitation retrieval
+- Machine learning
+- Python
